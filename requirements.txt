@@ -1,1 +1,5 @@
-pysocks
+undetected-chromedriver
+pandas
+beautifulsoup4
+selenium
+setuptools

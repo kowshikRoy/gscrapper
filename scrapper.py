@@ -3,15 +3,19 @@ import csv
 import os
 import random
 import re
+import ssl
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+import undetected_chromedriver as uc
 from bs4 import BeautifulSoup, Tag
-from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+
+ssl._create_default_https_context = ssl._create_unverified_context
+lock = threading.Lock()
 
 # --- Constants ---
 
@@ -25,7 +29,7 @@ USER_AGENTS = [
 
 CSV_FILE = "scrapped_gscholar.csv"
 BIB_FILE = "scrapped_gscholar.bib"
-COLUMNS = ['Page_Index', 'Order_in_Page', 'Title', 'Year', 'Authors', 'Publication_Info', 'Abstract', 'Link', 'DOI', 'Citations', 'Scholar_Link']
+COLUMNS = ['Page_Index', 'Order_in_Page', 'Title', 'Year', 'Authors', 'Publication_Info', 'Abstract', 'Link', 'DOI', 'Citations', 'Scholar_Link', 'Author_Keywords']
 
 
 # --- Helper Functions ---
@@ -82,6 +86,55 @@ def generate_bibtex(entry: pd.Series) -> str:
     return "\n".join(bibtex_parts)
 
 
+def extract_paper_details(url: str) -> Dict[str, Any]:
+    """Extracts detailed information from the paper's page."""
+    details = {'Abstract': None, 'Author_Keywords': None, 'DOI': None}
+    options = Options()
+    options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    options.add_argument('--proxy-server=socks5://122.0.0.1:9050')
+    with lock:
+        driver = uc.Chrome(options=options, headless=True)
+    try:
+        driver.get(url)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+
+        # Extract Abstract
+        abstract_selectors = ['div.abstract', 'div#abstract', 'section.abstract']
+        for selector in abstract_selectors:
+            abstract_element = soup.select_one(selector)
+            if abstract_element:
+                details['Abstract'] = abstract_element.get_text(strip=True)
+                break
+
+        # Extract Keywords
+        keyword_selectors = ['div.keywords', 'div#keywords', 'meta[name="keywords"]']
+        for selector in keyword_selectors:
+            keyword_element = soup.select_one(selector)
+            if keyword_element:
+                if keyword_element.name == 'meta':
+                    details['Author_Keywords'] = keyword_element.get('content')
+                else:
+                    details['Author_Keywords'] = keyword_element.get_text(strip=True)
+                break
+        
+        # Extract DOI
+        doi_selectors = ['a[href*="doi.org"]', 'meta[name="citation_doi"]']
+        for selector in doi_selectors:
+            doi_element = soup.select_one(selector)
+            if doi_element:
+                if doi_element.name == 'meta':
+                    details['DOI'] = doi_element.get('content')
+                else:
+                    details['DOI'] = doi_element.get('href')
+                break
+
+    except Exception as e:
+        print(f"Could not fetch details from {url}: {e}")
+    finally:
+        driver.quit()
+    return details
+
+
 def parse_search_result(job_element: Tag, current_page_index: int, order_in_page: int, scraped_links: set) -> Optional[Dict[str, Any]]:
     """Parses a single search result from a BeautifulSoup element."""
     links = job_element.find("a")
@@ -132,15 +185,22 @@ def parse_search_result(job_element: Tag, current_page_index: int, order_in_page
         'Scholar_Link': link_url,
     }
 
+    if link:
+        print(f"Fetching details from: {link}")
+        detailed_info = extract_paper_details(link)
+        entry_data.update(detailed_info)
+
+
     print(f"Page: {current_page_index}, Order: {order_in_page}")
     print(f"Title: {title_element}")
     print(f"Year: {year}")
     print(f"Authors: {authors_part}")
     print(f"Publication Info: {publication_part}")
-    print(f"Abstract: {abstract}")
+    print(f"Abstract: {entry_data.get('Abstract', 'N/A')}")
     print(f"Link: {link}")
-    print(f"DOI: {doi}")
+    print(f"DOI: {entry_data.get('DOI', 'N/A')}")
     print(f"Citations: {citations}")
+    print(f"Author Keywords: {entry_data.get('Author_Keywords', 'N/A')}")
     print("-" * 20)
 
     return entry_data
@@ -184,79 +244,89 @@ def generate_bib_file():
             print(f"Successfully generated {BIB_FILE} with {len(bibtex_entries)} entries.")
 
 
+def scrape_page(page_num: int, base_url: str, scraped_links: set) -> List[Dict[str, Any]]:
+    """Scrapes a single page of Google Scholar results."""
+    options = Options()
+    options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
+    with lock:
+        driver = uc.Chrome(options=options, headless=True)
+    new_results = []
+    current_page_index = page_num // 10 + 1
+    try:
+        print(f"Scraping page {current_page_index}")
+
+        if 'start=' in base_url:
+            current_url = re.sub(r'start=\d+', f'start={page_num}', base_url)
+        else:
+            current_url = f"{base_url}&start={page_num}"
+
+        driver.get(current_url)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        wait(2, 5)
+
+        results_container = soup.find("div", id="gs_res_ccl_mid")
+        if not results_container:
+            print(f"Could not find results container for page {current_page_index}.")
+            return []
+
+        job_elements = results_container.find_all("div", class_="gs_ri")
+        if not job_elements:
+            print(f"No results found on page {current_page_index}.")
+            return []
+
+        for i, job_element in enumerate(job_elements):
+            entry_data = parse_search_result(job_element, current_page_index, i + 1, scraped_links)
+            if entry_data:
+                new_results.append(entry_data)
+        print(f"Successfully scraped page {current_page_index}, found {len(new_results)} new results.")
+    except Exception as e:
+        print(f"An error occurred while scraping page {current_page_index}: {e}")
+    finally:
+        driver.quit()
+    return new_results
+
+
 def main():
     """Main function to run the Google Scholar scraper."""
     parser = argparse.ArgumentParser(description='Scrape Google Scholar search results.')
     parser.add_argument('url', nargs='?',
                         default='https://scholar.google.com/scholar?start=0&q=%22autism%22+and+%22bangladesh%22&hl=en&as_sdt=0,48&as_ylo=2020&as_yhi=2025&as_rr=1&as_vis=1',
                         help='The Google Scholar search URL to scrape.')
+    parser.add_argument('--num-pages', type=int, default=10, help='Number of pages to scrape.')
+    parser.add_argument('--max-workers', type=int, default=5, help='Maximum number of parallel workers.')
     args = parser.parse_args()
     base_url = args.url
 
     df = load_existing_data()
     scraped_links = set(df['Scholar_Link'].dropna())
 
-    options = Options()
-    options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
-    options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
-    # options.add_argument("--headless") # Uncomment for headless browsing
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    start_page = 0
+    if not df.empty and 'Page_Index' in df.columns and df['Page_Index'].notna().any():
+        last_page = df['Page_Index'].max()
+        start_page = int(last_page)
+        print(f"Resuming scrape from page {start_page + 1}")
+    else:
+        match = re.search(r'start=(\d+)', base_url)
+        if match:
+            start_page = int(match.group(1)) // 10
+    
+    pages_to_scrape = [((start_page + i) * 10) for i in range(args.num_pages)]
+    all_new_results = []
 
-    try:
-        driver.get(base_url)
-        input("Please solve the CAPTCHA in the browser and press Enter to continue...")
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        future_to_page = {executor.submit(scrape_page, page_num, base_url, scraped_links): page_num for page_num in pages_to_scrape}
+        for future in as_completed(future_to_page):
+            page_num = future_to_page[future]
+            try:
+                results = future.result()
+                all_new_results.extend(results)
+            except Exception as exc:
+                print(f'Page {page_num // 10 + 1} generated an exception: {exc}')
 
-        page_num = 0
-        if not df.empty and 'Page_Index' in df.columns and df['Page_Index'].notna().any():
-            # Resume from the next page after the last one scraped
-            last_page = df['Page_Index'].max()
-            page_num = int(last_page) * 10
-            print(f"Resuming scrape from page {int(last_page) + 1}")
-        else:
-            # Start from the beginning or from the 'start' param in the URL
-            match = re.search(r'start=(\d+)', base_url)
-            if match:
-                page_num = int(match.group(1))
-            else:
-                page_num = 0
-
-        while True:
-            current_page_index = page_num // 10 + 1
-            print(f"Going to page {current_page_index}.\n")
-
-            if 'start=' in base_url:
-                current_url = re.sub(r'start=\d+', f'start={page_num}', base_url)
-            else:
-                current_url = f"{base_url}&start={page_num}"
-
-            driver.get(current_url)
-            soup = BeautifulSoup(driver.page_source, "html.parser")
-            wait()
-
-            results_container = soup.find("div", id="gs_res_ccl_mid")
-            if not results_container:
-                print("Could not find results container. This might be a reCAPTCHA page or end of results.")
-                break
-
-            job_elements = results_container.find_all("div", class_="gs_ri")
-            if not job_elements:
-                print("No more results found. Exiting loop.")
-                break
-
-            new_results = []
-            for i, job_element in enumerate(job_elements):
-                entry_data = parse_search_result(job_element, current_page_index, i + 1, scraped_links)
-                if entry_data:
-                    new_results.append(entry_data)
-                    scraped_links.add(entry_data['Scholar_Link'])
-
-            df = save_data(df, new_results)
-            page_num += 10
-
-    finally:
-        driver.quit()
-        generate_bib_file()
-        print("Job finished, Godspeed you! Cite us.")
+    df = save_data(df, all_new_results)
+    generate_bib_file()
+    print("Job finished, Godspeed you! Cite us.")
 
 
 if __name__ == "__main__":
