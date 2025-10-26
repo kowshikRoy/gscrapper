@@ -188,7 +188,7 @@ def main():
     """Main function to run the Google Scholar scraper."""
     parser = argparse.ArgumentParser(description='Scrape Google Scholar search results.')
     parser.add_argument('url', nargs='?',
-                        default='https://scholar.google.com/scholar?start=10&q=%22autism%22+and+%22bangladesh%22&hl=en&as_sdt=0,48&as_ylo=2020&as_yhi=2025&as_rr=1&as_vis=1',
+                        default='https://scholar.google.com/scholar?start=0&q=%22autism%22+and+%22bangladesh%22&hl=en&as_sdt=0,48&as_ylo=2020&as_yhi=2025&as_rr=1&as_vis=1',
                         help='The Google Scholar search URL to scrape.')
     args = parser.parse_args()
     base_url = args.url
@@ -198,6 +198,7 @@ def main():
 
     options = Options()
     options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+    options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
     # options.add_argument("--headless") # Uncomment for headless browsing
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
