@@ -30,6 +30,30 @@ This script scrapes search results from Google Scholar, extracting titles, autho
     pip install -r requirements.txt
     ```
 
+## Tor Proxy Setup
+
+To use Tor proxy with this scrapper, follow these steps:
+
+1.  **Install Tor:**
+    *   **macOS:** `brew install tor`
+    *   **Linux:** `sudo apt-get install tor` (Debian/Ubuntu) or `sudo dnf install tor` (Fedora)
+    *   **Windows:** Download and install the Tor Browser, which includes a Tor client. You can also install Vidalia Bundle for a standalone Tor client.
+
+2.  **Start Tor:**
+    *   **macOS/Linux:** `brew services start tor` or `sudo systemctl start tor`
+    *   **Windows:** The Tor Browser or Vidalia Bundle usually starts Tor automatically.
+
+3.  **Verify Tor is running:**
+    *   Check the Tor logs or status. On macOS/Linux, you can use `brew services list` or `sudo systemctl status tor`.
+    *   The default SOCKS5 proxy address for Tor is `127.0.0.1:9050`.
+
+4.  **Run the scrapper:**
+    The script is already configured to use `socks5://127.0.0.1:9050` as the proxy.
+    Simply run the script as usual:
+    `python scrapper.py`
+
+    If you need to use a different proxy address or port, modify the `--proxy-server` argument in `extract_paper_details` and `scrape_page` functions within `scrapper.py`.
+
 ## Usage
 
 To start scraping, run the script with a Google Scholar search URL. If no URL is provided, it will use a default example URL.
