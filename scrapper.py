@@ -31,6 +31,9 @@ CSV_FILE = "scrapped_gscholar.csv"
 BIB_FILE = "scrapped_gscholar.bib"
 COLUMNS = ['Page_Index', 'Order_in_Page', 'Title', 'Year', 'Authors', 'Publication_Info', 'Abstract', 'Link', 'DOI', 'Citations', 'Scholar_Link', 'Author_Keywords']
 
+# Compiled regex for year extraction
+YEAR_PATTERN = re.compile(r'\b\d{4}\b')
+
 
 # --- Helper Functions ---
 
@@ -43,7 +46,7 @@ def wait(min_seconds: int = 5, max_seconds: int = 15):
 
 def extract_year(text: str) -> Optional[int]:
     """Extracts the year from a string using regex."""
-    match = re.search(r'\b\d{4}\b', text)
+    match = YEAR_PATTERN.search(text)
     return int(match.group(0)) if match else None
 
 
