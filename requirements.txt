@@ -3,3 +3,5 @@ pandas
 beautifulsoup4
 selenium
 setuptools
+pytest
+pytest-mock
