@@ -96,7 +96,7 @@ def extract_paper_details(url: str) -> Dict[str, Any]:
         driver = uc.Chrome(options=options, headless=True)
     try:
         driver.get(url)
-        soup = BeautifulSoup(driver.page_source, "html.parser")
+        soup = BeautifulSoup(driver.page_source, "lxml")
 
         # Extract Abstract
         abstract_selectors = ['div.abstract', 'div#abstract', 'section.abstract']
@@ -262,7 +262,7 @@ def scrape_page(page_num: int, base_url: str, scraped_links: set) -> List[Dict[s
             current_url = f"{base_url}&start={page_num}"
 
         driver.get(current_url)
-        soup = BeautifulSoup(driver.page_source, "html.parser")
+        soup = BeautifulSoup(driver.page_source, "lxml")
         wait(2, 5)
 
         results_container = soup.find("div", id="gs_res_ccl_mid")
