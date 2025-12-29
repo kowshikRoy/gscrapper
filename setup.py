@@ -11,7 +11,6 @@ setup(
         'pandas',
         'beautifulsoup4',
         'selenium',
-        'setuptools',
     ],
     entry_points={
         'console_scripts': [
