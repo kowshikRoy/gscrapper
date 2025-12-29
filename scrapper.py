@@ -89,14 +89,19 @@ def generate_bibtex(entry: pd.Series) -> str:
     return "\n".join(bibtex_parts)
 
 
-def extract_paper_details(url: str) -> Dict[str, Any]:
+def extract_paper_details(url: str, driver: Optional[uc.Chrome] = None) -> Dict[str, Any]:
     """Extracts detailed information from the paper's page."""
     details = {'Abstract': None, 'Author_Keywords': None, 'DOI': None}
-    options = Options()
-    options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
-    options.add_argument('--proxy-server=socks5://122.0.0.1:9050')
-    with lock:
-        driver = uc.Chrome(options=options, headless=True)
+
+    driver_created = False
+    if driver is None:
+        options = Options()
+        options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
+        options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
+        with lock:
+            driver = uc.Chrome(options=options, headless=True)
+        driver_created = True
+
     try:
         driver.get(url)
         soup = BeautifulSoup(driver.page_source, "html.parser")
@@ -134,11 +139,12 @@ def extract_paper_details(url: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"Could not fetch details from {url}: {e}")
     finally:
-        driver.quit()
+        if driver_created:
+            driver.quit()
     return details
 
 
-def parse_search_result(job_element: Tag, current_page_index: int, order_in_page: int, scraped_links: set) -> Optional[Dict[str, Any]]:
+def parse_search_result(job_element: Tag, current_page_index: int, order_in_page: int, scraped_links: set, driver: Optional[uc.Chrome] = None) -> Optional[Dict[str, Any]]:
     """Parses a single search result from a BeautifulSoup element."""
     links = job_element.find("a")
     if not links:
@@ -190,7 +196,7 @@ def parse_search_result(job_element: Tag, current_page_index: int, order_in_page
 
     if link:
         print(f"Fetching details from: {link}")
-        detailed_info = extract_paper_details(link)
+        detailed_info = extract_paper_details(link, driver=driver)
         entry_data.update(detailed_info)
 
 
@@ -252,6 +258,7 @@ def scrape_page(page_num: int, base_url: str, scraped_links: set) -> List[Dict[s
     options = Options()
     options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
+    driver = None
     with lock:
         driver = uc.Chrome(options=options, headless=True)
     new_results = []
@@ -279,14 +286,15 @@ def scrape_page(page_num: int, base_url: str, scraped_links: set) -> List[Dict[s
             return []
 
         for i, job_element in enumerate(job_elements):
-            entry_data = parse_search_result(job_element, current_page_index, i + 1, scraped_links)
+            entry_data = parse_search_result(job_element, current_page_index, i + 1, scraped_links, driver=driver)
             if entry_data:
                 new_results.append(entry_data)
         print(f"Successfully scraped page {current_page_index}, found {len(new_results)} new results.")
     except Exception as e:
         print(f"An error occurred while scraping page {current_page_index}: {e}")
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
     return new_results
 
 
