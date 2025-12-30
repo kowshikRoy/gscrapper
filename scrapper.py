@@ -31,6 +31,9 @@ CSV_FILE = "scrapped_gscholar.csv"
 BIB_FILE = "scrapped_gscholar.bib"
 COLUMNS = ['Page_Index', 'Order_in_Page', 'Title', 'Year', 'Authors', 'Publication_Info', 'Abstract', 'Link', 'DOI', 'Citations', 'Scholar_Link', 'Author_Keywords']
 
+# Compiled regex for year extraction
+YEAR_PATTERN = re.compile(r'\b\d{4}\b')
+
 
 # --- Helper Functions ---
 
@@ -43,7 +46,7 @@ def wait(min_seconds: int = 5, max_seconds: int = 15):
 
 def extract_year(text: str) -> Optional[int]:
     """Extracts the year from a string using regex."""
-    match = re.search(r'\b\d{4}\b', text)
+    match = YEAR_PATTERN.search(text)
     return int(match.group(0)) if match else None
 
 
@@ -89,14 +92,15 @@ def generate_bibtex(entry: pd.Series) -> str:
 def extract_paper_details(url: str, driver: Optional[uc.Chrome] = None) -> Dict[str, Any]:
     """Extracts detailed information from the paper's page."""
     details = {'Abstract': None, 'Author_Keywords': None, 'DOI': None}
-    own_driver = False
+    driver_created = False
     if driver is None:
-        own_driver = True
         options = Options()
         options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
-        options.add_argument('--proxy-server=socks5://122.0.0.1:9050')
+        options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
         with lock:
             driver = uc.Chrome(options=options, headless=True)
+        driver_created = True
+
     try:
         driver.get(url)
         soup = BeautifulSoup(driver.page_source, "html.parser")
@@ -134,7 +138,7 @@ def extract_paper_details(url: str, driver: Optional[uc.Chrome] = None) -> Dict[
     except Exception as e:
         print(f"Could not fetch details from {url}: {e}")
     finally:
-        if own_driver:
+        if driver_created:
             driver.quit()
     return details
 
@@ -253,6 +257,7 @@ def scrape_page(page_num: int, base_url: str, scraped_links: set) -> List[Dict[s
     options = Options()
     options.add_argument(f'user-agent={random.choice(USER_AGENTS)}')
     options.add_argument('--proxy-server=socks5://127.0.0.1:9050')
+    driver = None
     with lock:
         driver = uc.Chrome(options=options, headless=True)
     new_results = []
@@ -287,7 +292,8 @@ def scrape_page(page_num: int, base_url: str, scraped_links: set) -> List[Dict[s
     except Exception as e:
         print(f"An error occurred while scraping page {current_page_index}: {e}")
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
     return new_results
 
 
