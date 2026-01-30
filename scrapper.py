@@ -88,6 +88,36 @@ def restart_tor_service(command: str) -> bool:
         return False
 
 
+def check_tor_connection(proxy_url: str) -> bool:
+    """Checks if the Tor proxy is reachable."""
+    try:
+        # Parse proxy URL (e.g., socks5://127.0.0.1:9050)
+        proxy_host = "127.0.0.1"
+        proxy_port = 9050
+        
+        if "://" in proxy_url:
+            try:
+                parts = proxy_url.split("://")
+                if len(parts) > 1:
+                    address = parts[1]
+                    if ":" in address:
+                        proxy_host, proxy_port_str = address.split(":")
+                        proxy_port = int(proxy_port_str)
+                    else:
+                        proxy_host = address
+            except ValueError:
+                 pass # Fallback to defaults
+
+        logging.info(f"Checking Tor connection at {proxy_host}:{proxy_port}...")
+        with socket.create_connection((proxy_host, proxy_port), timeout=5):
+            logging.info(f"Tor proxy at {proxy_host}:{proxy_port} is reachable.")
+            return True
+            
+    except Exception as e:
+        logging.warning(f"Tor proxy is NOT reachable: {e}")
+        return False
+
+
 def safe_driver_get(driver: uc.Chrome, url: str, proxy: Optional[str] = None, headless: bool = True, tor_restart_cmd: Optional[str] = None, min_wait: int = 5000, max_wait: int = 15000, validator: Optional[Callable[[uc.Chrome], bool]] = None) -> Tuple[bool, bool, uc.Chrome]:
     """
     Safely navigates to a URL with built-in block detection and recovery.
@@ -137,12 +167,16 @@ def safe_driver_get(driver: uc.Chrome, url: str, proxy: Optional[str] = None, he
                         except:
                             pass
                         
+
                         with lock:
                             options = Options()
                             options.add_argument("--window-size=1920,1080")
+                            if current_headless:
+                                options.add_argument("--headless=new")
                             if proxy:
                                 options.add_argument(f'--proxy-server={proxy}')
-                            driver = uc.Chrome(options=options, headless=current_headless, version_main=144)
+                            # Force headless=False in uc init, handle headless via options
+                            driver = uc.Chrome(options=options, headless=False, version_main=144)
 
                         retry_count += 1
                         continue
@@ -564,12 +598,15 @@ def scrape_page(page_num: int, base_url: str, scraped_links: set, proxy: Optiona
         options = Options()
         if not headless:
              options.add_argument("--window-size=1920,1080")
-            
+        else:
+             options.add_argument("--headless=new")
+
         if proxy:
              options.add_argument(f'--proxy-server={proxy}')
         
         with lock:
-             driver = uc.Chrome(options=options, headless=headless, version_main=144)
+             # Force headless=False in uc init, handle headless via options
+             driver = uc.Chrome(options=options, headless=False, version_main=144)
         driver_created_locally = True
 
     new_results = []
@@ -681,8 +718,8 @@ def main():
     parser.add_argument('--num-pages', type=int, default=100, help='Number of pages to scrape.')
     parser.add_argument('--max-workers', type=int, default=1, help='Maximum number of parallel workers. Default is 1 for safety.')
     parser.add_argument('--proxy', type=str, default='socks5://127.0.0.1:9050', help='Proxy server URL.')
-    parser.add_argument('--no-headless', action='store_true', help='Run browser in visible mode (not headless).')
-
+    # Headless mode removed, always visible
+    
     parser.add_argument('--start-page', type=int, help='Page number to start scraping from (1-based, overrides auto-resume).')
     parser.add_argument('--min-wait', type=int, default=100, help='Minimum milliseconds to wait between requests.')
     parser.add_argument('--max-wait', type=int, default=3000, help='Maximum milliseconds to wait between requests.')
@@ -706,10 +743,14 @@ def main():
     
     setup_logging(log_file)
     
+    # Check Tor connection if proxy is set
+    if args.proxy:
+        check_tor_connection(args.proxy)
+
     # Sanitize URL: remove backslashes that might be introduced by shell escaping
     base_url = args.url.replace('\\', '')
 
-    headless = not args.no_headless
+    headless = False # Always visible as per user request
 
     df = load_existing_data(csv_file)
     scraped_links = set(df['Scholar_Link'].dropna())
@@ -745,11 +786,14 @@ def main():
         options = Options()
         if not headless:
             options.add_argument("--window-size=1920,1080")
+        else:
+            options.add_argument("--headless=new")
+            
         if args.proxy:
              options.add_argument(f'--proxy-server={args.proxy}')
         
-        
-        d = uc.Chrome(options=options, headless=headless, version_main=144)
+        # Force headless=False in uc init, handle headless via options
+        d = uc.Chrome(options=options, headless=False, version_main=144)
         drivers.append(d)
 
         driver_queue.put(d)

@@ -69,22 +69,24 @@ def test_generate_bibtex():
 
 def test_load_existing_data(tmp_path):
     # Patch the CSV_FILE constant in scrapper module
-    with patch('scrapper.CSV_FILE', str(tmp_path / "test_data.csv")):
-        # Case 1: File doesn't exist
-        df = load_existing_data()
-        assert df.empty
-        assert list(df.columns) == COLUMNS
+    csv_path = str(tmp_path / "test_data.csv")
+    # Patch not needed for arg, but maybe used inside? No, passed in.
+    
+    # Case 1: File doesn't exist
+    df = load_existing_data(csv_path)
+    assert df.empty
+    assert list(df.columns) == COLUMNS
 
-        # Case 2: File exists
-        test_data = pd.DataFrame({'Title': ['Test Paper'], 'Page_Index': [1]})
-        test_data.to_csv(tmp_path / "test_data.csv", index=False)
-        
-        df_loaded = load_existing_data()
-        assert not df_loaded.empty
-        assert len(df_loaded) == 1
-        assert df_loaded.iloc[0]['Title'] == 'Test Paper'
-        # Check if missing columns were added
-        assert 'DOI' in df_loaded.columns
+    # Case 2: File exists
+    test_data = pd.DataFrame({'Title': ['Test Paper'], 'Page_Index': [1]})
+    test_data.to_csv(csv_path, index=False)
+    
+    df_loaded = load_existing_data(csv_path)
+    assert not df_loaded.empty
+    assert len(df_loaded) == 1
+    assert df_loaded.iloc[0]['Title'] == 'Test Paper'
+    # Check if missing columns were added
+    assert 'DOI' in df_loaded.columns
 
 # --- Test Parsing Logic ---
 
@@ -92,7 +94,7 @@ def test_parse_search_result():
     html_template = """
     <div class="gs_ri">
         <h3 class="gs_rt"><a href="http://example.com/paper.pdf">Test Paper Title</a></h3>
-        <div class="gs_a">Author Name - Journal Name, 2023 - Publisher</div>
+        <div class="gs_a"><a href="/citations?user=123">Author Name</a> - Journal Name, 2023 - Publisher</div>
         <div class="gs_rs">This is the abstract text.</div>
         <div class="gs_fl"><a href="/scholar?cites=10">Cited by 10</a></div>
     </div>
@@ -100,16 +102,20 @@ def test_parse_search_result():
     soup = BeautifulSoup(html_template, "html.parser")
     job_element = soup.find("div", class_="gs_ri")
     
-    # Mock extract_paper_details to avoid network calls
-    with patch('scrapper.extract_paper_details') as mock_details:
-        mock_details.return_value = {'Abstract': 'Detailed Abstract', 'DOI': '10.1000/xyz'}
+    # Mock find_citation_view_url and extract_citation_view_details
+    with patch('scrapper.find_citation_view_url') as mock_find, \
+         patch('scrapper.extract_citation_view_details') as mock_details:
+        
+        mock_find.return_value = ("http://scholar.google.com/citation?...", None)
+        mock_details.return_value = ({'Abstract': 'Detailed Abstract', 'DOI': '10.1000/xyz'}, None)
         
         result = parse_search_result(
             job_element=job_element,
             current_page_index=1,
             order_in_page=1,
             scraped_links=set(),
-            fetch_details=True
+            # No fetch_details arg anymore
+            driver=MagicMock() 
         )
         
         assert result is not None
