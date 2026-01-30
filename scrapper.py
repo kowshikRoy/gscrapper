@@ -73,19 +73,40 @@ def wait(min_ms: int = 0, max_ms: int = 1000):
 
 
 
+
+# Global lock for Tor restart to prevent concurrent restarts
+tor_restart_lock = threading.Lock()
+last_tor_restart_time = 0
+
 def restart_tor_service(command: str) -> bool:
-    """Restarts the Tor service using the provided shell command."""
-    try:
-        logging.info(f"Restarting Tor service with command: {command}")
-        subprocess.run(command, shell=True, check=True)
-        logging.info("Tor service restart command executed successfully.")
+    """Restarts the Tor service using the provided shell command, with cooldown."""
+    global last_tor_restart_time
+    
+    # Check if a restart happened recently (e.g., within 60 seconds)
+    # This check is outside the lock for performance optimization
+    if time.time() - last_tor_restart_time < 60:
+        logging.info("Tor service was restarted recently. Skipping redundant restart.")
         return True
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Failed to restart Tor service: {e}")
-        return False
-    except Exception as e:
-        logging.error(f"An unexpected error occurred restarting Tor: {e}")
-        return False
+
+    with tor_restart_lock:
+        # Double-check inside the lock to be thread-safe
+        if time.time() - last_tor_restart_time < 60:
+             logging.info("Tor service was restarted recently by another worker. Skipping.")
+             return True
+
+        try:
+            logging.info(f"Restarting Tor service with command: {command}")
+            # Mark the time BEFORE starting the process so blocked threads will see it immediately
+            last_tor_restart_time = time.time() 
+            subprocess.run(command, shell=True, check=True)
+            logging.info("Tor service restart command executed successfully.")
+            return True
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Failed to restart Tor service: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"An unexpected error occurred restarting Tor: {e}")
+            return False
 
 
 def check_tor_connection(proxy_url: str) -> bool:
