@@ -108,7 +108,8 @@ def test_parse_search_result():
             job_element=job_element,
             current_page_index=1,
             order_in_page=1,
-            scraped_links=set()
+            scraped_links=set(),
+            fetch_details=True
         )
         
         assert result is not None
