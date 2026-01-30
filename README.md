@@ -62,7 +62,7 @@ To start scraping, run the script with a Google Scholar search URL. The browser 
 python scrapper.py "your-google-scholar-url"
 ```
 
-### Command Line Arguments
+### Important Command Line Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
@@ -71,24 +71,19 @@ python scrapper.py "your-google-scholar-url"
 | `--num-pages` | Number of search result pages to scrape. | `100` |
 | `--max-workers` | Maximum number of parallel browser instances. | `1` |
 | `--start-page` | Manually specify the starting page number (1-based). Overrides auto-resume. | `None` |
+To see the full list of available command-line arguments, run:
+
+```bash
+python scrapper.py --help
+```
 
 ### Examples
 
-**Basic Usage:**
+**Usage:**
 ```bash
 python scrapper.py --output "ml_results" --max-workers 2 "https://scholar.google.com/scholar?q=machine+learning"
 ```
 
-**Custom Output Filename:**
-```bash
-# Creates my_results.csv, my_results.bib, my_results.log
-python scrapper.py "https://scholar.google.com/scholar?q=autism" --output "my_results"
-```
-
-**Parallel Scraping with Tor:**
-```bash
-python scrapper.py "https://scholar.google.com/scholar?q=AI" --max-workers 2
-```
 
 
 ### Solving CAPTCHAs
