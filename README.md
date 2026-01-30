@@ -56,18 +56,43 @@ To use Tor proxy with this scrapper, follow these steps:
 
 ## Usage
 
-To start scraping, run the script with a Google Scholar search URL. If no URL is provided, it will use a default example URL.
+To start scraping, run the script with a Google Scholar search URL. The browser will open in **visible mode** (non-headless) to improve stability and avoid detection.
 
 ```bash
 python scrapper.py "your-google-scholar-url"
 ```
 
-### Example
+### Command Line Arguments
 
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `url` | The Google Scholar search URL to scrape. Should be quoted. | *Default internal URL* |
+| `--output` | Output filename prefix (without extension). Generates `.csv`, `.bib`, and `.log` files. | `scrapped_gscholar` |
+| `--num-pages` | Number of search result pages to scrape. | `100` |
+| `--max-workers` | Maximum number of parallel browser instances. | `1` |
+| `--start-page` | Manually specify the starting page number (1-based). Overrides auto-resume. | `None` |
+
+### Examples
+
+**Basic Usage:**
 ```bash
-python scrapper.py "https://scholar.google.com/scholar?q=machine+learning&hl=en&as_sdt=0,5"
+python scrapper.py "https://scholar.google.com/scholar?q=machine+learning"
 ```
 
-When you run the script for the first time, it may be interrupted by a CAPTCHA. The script will pause and prompt you to solve the CAPTCHA in the browser window that it opens. Once you've solved it, press `Enter` in the terminal to continue scraping.
+**Custom Output Filename:**
+```bash
+# Creates my_results.csv, my_results.bib, my_results.log
+python scrapper.py "https://scholar.google.com/scholar?q=autism" --output "my_results"
+```
 
-The scraped data will be saved to `scrapped_gscholar.csv`, and a corresponding BibTeX file will be generated at `scrapped_gscholar.bib`.
+**Parallel Scraping with Tor:**
+```bash
+python scrapper.py "https://scholar.google.com/scholar?q=AI" --max-workers 2
+```
+
+
+### Solving CAPTCHAs
+
+When you run the script, it may be interrupted by a CAPTCHA or "Unusual Traffic" block. The script will pause and prompt you to solve the CAPTCHA in the open browser window. Once you've solved it and the results are visible, press `Enter` in the terminal to continue scraping.
+
+The scraped data will be saved to `[output].csv` (default: `scrapped_gscholar.csv`), and a corresponding BibTeX file will be generated at `[output].bib`.
