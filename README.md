@@ -48,11 +48,11 @@ To use Tor proxy with this scrapper, follow these steps:
     *   The default SOCKS5 proxy address for Tor is `127.0.0.1:9050`.
 
 4.  **Run the scrapper:**
-    The script is already configured to use `socks5://127.0.0.1:9050` as the proxy.
+    The script is configured to use `socks5://127.0.0.1:9050` as the default proxy.
     Simply run the script as usual:
     `python scrapper.py`
 
-    If you need to use a different proxy address or port, modify the `--proxy-server` argument in `extract_paper_details` and `scrape_page` functions within `scrapper.py`.
+    If you need to use a different proxy address or port, use the `--proxy` argument (e.g. `--proxy socks5://127.0.0.1:9150`).
 
 ## Usage
 
@@ -76,7 +76,7 @@ python scrapper.py "your-google-scholar-url"
 
 **Basic Usage:**
 ```bash
-python scrapper.py "https://scholar.google.com/scholar?q=machine+learning"
+python scrapper.py --output "ml_results" --max-workers 2 "https://scholar.google.com/scholar?q=machine+learning"
 ```
 
 **Custom Output Filename:**
